@@ -1,0 +1,1 @@
+Run `python -m pytest tests` from the repository root after installing `requirements.txt`.
