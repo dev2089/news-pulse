@@ -94,7 +94,7 @@ The required 2–3 minute walkthrough follows the assessment order:
 The final recording should be made against the deployed app so the demo is truthful.
 ## Vercel import
 
-The repository is Vercel-ready. A one-click import URL is:
-https://vercel.com/new/import?s=https%3A%2F%2Fgithub.com%2Fdev2089%2Fnews-pulse
+The repository is Vercel-ready and uses Vercel’s native Next.js detection. A current import URL is:
+https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fdev2089%2Fnews-pulse&project-name=news-pulse
 
-After import, configure `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` for Production and Preview. No source files contain secret values.
+Environment variables are supported as deployment overrides. The app also has a documented fallback to the Supabase publishable key so the assessment demo can boot without manual configuration; no secret/service-role key is used.
