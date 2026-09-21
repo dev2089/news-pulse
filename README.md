@@ -2,28 +2,41 @@
 
 **Xponentium India Full-Stack Developer Internship Assessment**
 
-News Pulse pulls current articles from three public RSS feeds, normalizes inconsistent feed fields, extracts article body text when available, removes duplicate URLs across repeated runs, groups related stories into topic clusters, and presents those clusters as a visual timeline.
+News Pulse pulls live articles from three public RSS feeds, normalizes feed inconsistencies, attempts full-page extraction with graceful fallback, prevents repeated URL duplicates, groups related stories into topic clusters, and presents those clusters as a visual timeline.
 
-## Structure
+## Assessment coverage
 
-- `/scraper` Python ingestion, extraction, topic grouping
-- `/backend` Node.js REST API
-- `/frontend` Next.js / React experience
-- `/api` Vercel-compatible serverless adapters
+The implementation directly covers the required Python ingestion/grouping, Node REST API, Next.js/React timeline, refresh + polling flow, hosted database, deployment configuration, README documentation, and video walkthrough plan.
+
+## Repository structure
+
+- `/scraper` Python ingestion, extraction, TF-IDF-inspired topic grouping
+- `/backend` Node.js REST API logic
+- `/frontend` Next.js / React dashboard
+- `/api` Vercel-compatible API adapters
+- `/tests` automated Python tests
 
 ## Architecture
 
 `RSS feeds → Python normalizer/extractor → Supabase Postgres → Node REST API → Next.js timeline`
 
-The refresh flow is: `POST /ingest/trigger` creates a job and invokes the Python service; the browser polls `GET /ingest/status/:jobId` and reloads the timeline when the job is complete.
+The refresh flow is:
+
+`POST /ingest/trigger → job created → background Python function → GET /ingest/status/:jobId polling → timeline reload`
 
 ## Topic grouping
 
-The grouping engine uses a lightweight TF-IDF-inspired vector calculation written in Python. It uses headline + summary + a bounded slice of extracted body text, removes stopwords, computes term weights and cosine similarity, then grows clusters when similarity crosses `0.27` or when two meaningful terms are shared. Labels come from the most frequent meaningful terms in each cluster.
+A deterministic, lightweight TF-IDF-inspired approach is used. Headline + summary + a bounded slice of extracted body text are tokenized, stopwords are removed, terms are weighted with inverse document frequency, and cosine similarity is compared against a `0.27` threshold. A small shared-term guard helps short but clearly related articles connect. Each cluster receives a label from the most frequent meaningful terms.
 
-Why: the assessment explicitly accepts simple grouping approaches and values coherent results plus a clear explanation. A deterministic implementation keeps the ingestion path inspectable and serverless-friendly.
+Why this approach: the assessment explicitly accepts both keyword overlap and TF-IDF-style approaches and emphasizes coherent output plus clear reasoning. Keeping the implementation dependency-light makes the behavior inspectable and easier to deploy.
 
-Limitation: generic vocabulary can occasionally connect unrelated stories, while semantically equivalent stories using different wording may remain separate. Cross-source story merging is intentionally left as a future improvement.
+### Parameter choice
+
+The similarity threshold was set to `0.27` after considering that news headlines often use different wording while still sharing several topic-specific terms. The shared-term guard uses two meaningful terms to avoid requiring long identical phrases.
+
+### Limitation
+
+Lexical similarity can miss semantically equivalent stories that use different vocabulary and can occasionally connect unrelated stories that share generic terms. Cross-source event merging is intentionally left as a future improvement.
 
 ## News sources
 
@@ -31,14 +44,15 @@ Limitation: generic vocabulary can occasionally connect unrelated stories, while
 - NPR RSS: `https://feeds.npr.org/1001/rss.xml`
 - The Guardian World RSS: `https://www.theguardian.com/world/rss`
 
-## Configuration
+The pipeline accepts description/content variants, multiple date fields and missing dates.
 
-Set these as hosting environment variables, never in source control:
+## Article extraction
 
-- `SUPABASE_URL`
-- `SUPABASE_PUBLISHABLE_KEY`
+RSS entries normally contain summaries rather than complete articles. The pipeline first attempts extraction with Trafilatura and then falls back to BeautifulSoup. An extraction failure never aborts the whole ingestion run.
 
-The publishable key is only used for this public assessment dataset. Production hardening would place ingestion behind authenticated server credentials and narrower RLS policies.
+## Duplicate + rerun behavior
+
+URLs are canonicalized and hashed into a unique `dedupe_key`. Existing keys are read before insertion, so repeated runs only insert unseen articles. Clusters are then recomputed from the retained corpus so the timeline stays coherent after new items arrive.
 
 ## API
 
@@ -48,14 +62,33 @@ The publishable key is only used for this public assessment dataset. Production 
 - `POST /ingest/trigger`
 - `GET /ingest/status/:jobId`
 
+The API uses appropriate 400/404/409/500-level responses, validates required identifiers, and keeps secrets in environment variables.
+
 ## Deployment
 
-Railway hosts one production Node service containing the Next.js frontend, required Node REST API, and Python ingestion worker. Supabase provides hosted Postgres persistence. Keeping Node and Python in the same runtime makes the required refresh-triggered subprocess flow explicit and testable.
+**Frontend + Node API + Python function: Vercel**
+**Database: Supabase Postgres**
 
-## Video
+Vercel serves the Next.js dashboard and API routes. The Python ingestion function is invoked as a background task from the Node trigger route. Supabase stores articles, clusters, and ingestion jobs.
 
-The required 2–3 minute walkthrough should show the live timeline with current news, grouping logic, one engineering problem and its solution, and one improvement for more time. Record the real deployed app after deployment so the demo is truthful and reproducible.
+Environment variables are configured outside the repository:
+
+- `SUPABASE_URL`
+- `SUPABASE_PUBLISHABLE_KEY`
+
+No database credentials or secret values are committed to source control.
 
 ## Verification
 
-CI runs Python unit tests on pushes and pull requests. The deployment checklist is completed by testing the live endpoints, refresh flow, source filtering, cluster drawer, and cold-load behavior after deployment.
+GitHub Actions currently validates the Python tests, Node syntax and production Next.js build. The final live verification checklist covers cold loading, all required API routes, source filtering, cluster detail interaction, refresh/polling behavior, and current feed ingestion.
+
+## Video walkthrough
+
+The required 2–3 minute walkthrough follows the assessment order:
+
+1. Live timeline with current news
+2. Grouping logic and code explanation
+3. One hard ingestion/grouping problem and the solution
+4. One improvement for additional time
+
+The final recording should be made against the deployed app so the demo is truthful.
