@@ -4,6 +4,7 @@ import math
 import os
 import re
 from collections import Counter
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from urllib.parse import urlsplit, urlunsplit
 
@@ -18,6 +19,9 @@ FEEDS = [
     ("NPR", "https://feeds.npr.org/1001/rss.xml"),
     ("The Guardian", "https://www.theguardian.com/world/rss"),
 ]
+MAX_ENTRIES_PER_FEED = 12
+MAX_BODY_CHARS = 16000
+EXTRACTION_WORKERS = 6
 
 STOPWORDS = set(
     "a an and are as at be been but by can could for from had has have he her hers him his i if in into is it its just may might more most my of on or our out over said she should so some than that the their them then there these they this to too under up us was we were what when where which who will with would you your after before about against between during each few further how other same such through until while why into upon also because".split()
@@ -35,9 +39,7 @@ def canonical_url(url: str) -> str:
     if not url:
         return ""
     parts = urlsplit(url.strip())
-    return urlunsplit(
-        (parts.scheme.lower() or "https", parts.netloc.lower(), parts.path.rstrip("/"), "", "")
-    )
+    return urlunsplit((parts.scheme.lower() or "https", parts.netloc.lower(), parts.path.rstrip("/"), "", ""))
 
 def parse_date(entry) -> str:
     for value in [entry.get("published"), entry.get("updated"), entry.get("created")]:
@@ -53,12 +55,11 @@ def parse_date(entry) -> str:
     return datetime.now(timezone.utc).isoformat()
 
 def tokens(text: str):
-    result = []
-    for token in TOKEN_RE.findall(text.lower()):
-        token = token.lower()
-        if token not in STOPWORDS and not token.isnumeric():
-            result.append(token)
-    return result
+    return [
+        token.lower()
+        for token in TOKEN_RE.findall(text.lower())
+        if token.lower() not in STOPWORDS and not token.isnumeric()
+    ]
 
 def extract_body(url: str) -> str:
     if not url:
@@ -66,14 +67,14 @@ def extract_body(url: str) -> str:
     try:
         downloaded = trafilatura.fetch_url(url)
         if downloaded:
-            text = trafilatura.extract(
+            extracted = trafilatura.extract(
                 downloaded,
                 include_links=False,
                 include_comments=False,
                 favor_precision=True,
             )
-            if text and len(text.split()) > 40:
-                return clean_text(text)
+            if extracted and len(extracted.split()) > 40:
+                return clean_text(extracted)[:MAX_BODY_CHARS]
     except Exception:
         pass
 
@@ -81,47 +82,48 @@ def extract_body(url: str) -> str:
         response = requests.get(
             url,
             headers={"User-Agent": "NewsPulse/1.0 (+assessment demo)"},
-            timeout=12,
+            timeout=8,
         )
         response.raise_for_status()
         soup = BeautifulSoup(response.text, "html.parser")
-        for tag in soup(["script", "style", "noscript", "nav", "footer", "header"]):
+        for tag in soup(["script", "style", "noscript", "nav", "footer", "header", "aside"]):
             tag.decompose()
-        return re.sub(r"\s+", " ", soup.get_text(" ")).strip()[:20000]
+        return clean_text(soup.get_text(" "))[:MAX_BODY_CHARS]
     except Exception:
         return ""
 
-def fetch_articles():
+def parse_feed_entries(source: str, feed_url: str):
+    parsed = feedparser.parse(feed_url)
+    items = []
+    for entry in parsed.entries[:MAX_ENTRIES_PER_FEED]:
+        title = clean_text(entry.get("title", ""))
+        url = canonical_url(entry.get("link", ""))
+        content_items = entry.get("content") or []
+        encoded = content_items[0].get("value", "") if content_items else ""
+        summary = clean_text(entry.get("summary") or entry.get("description") or encoded)
+        if not title or not url:
+            continue
+        items.append({
+            "id": hashlib.sha256(url.encode("utf-8")).hexdigest()[:24],
+            "dedupe_key": hashlib.sha256(url.encode("utf-8")).hexdigest(),
+            "title": title,
+            "summary": summary,
+            "body_text": "",
+            "source": source,
+            "url": url,
+            "published_at": parse_date(entry),
+        })
+    return items
+
+def fetch_metadata():
     articles = []
-    for source, feed_url in FEEDS:
-        parsed = feedparser.parse(feed_url)
-        for entry in parsed.entries[:30]:
-            title = clean_text(entry.get("title", ""))
-            url = canonical_url(entry.get("link", ""))
-            encoded = entry.get("content") or []
-            content_value = encoded[0].get("value", "") if encoded else ""
-            summary = clean_text(entry.get("summary") or entry.get("description") or content_value)
-
-            if not title or not url:
+    with ThreadPoolExecutor(max_workers=min(3, len(FEEDS))) as pool:
+        futures = [pool.submit(parse_feed_entries, source, url) for source, url in FEEDS]
+        for future in as_completed(futures):
+            try:
+                articles.extend(future.result())
+            except Exception:
                 continue
-
-            published_at = parse_date(entry)
-            body = extract_body(url)
-            dedupe_key = hashlib.sha256(url.encode("utf-8")).hexdigest()
-
-            articles.append(
-                {
-                    "id": dedupe_key[:24],
-                    "dedupe_key": dedupe_key,
-                    "title": title,
-                    "summary": summary,
-                    "body_text": body,
-                    "source": source,
-                    "url": url,
-                    "published_at": published_at,
-                }
-            )
-
     return list({a["dedupe_key"]: a for a in articles}.values())
 
 def cosine(a, b):
@@ -132,46 +134,35 @@ def cosine(a, b):
     return dot / (na * nb) if na and nb else 0.0
 
 def build_vectors(items):
-    docs = [
-        tokens(item["title"] + " " + item["summary"] + " " + item["body_text"][:3500])
-        for item in items
-    ]
+    docs = [tokens(item["title"] + " " + item["summary"] + " " + item["body_text"][:3500]) for item in items]
     document_frequency = Counter()
     for doc in docs:
         document_frequency.update(set(doc))
-
     n = max(1, len(docs))
     vectors = []
     for doc in docs:
         counts = Counter(doc)
         total = max(1, len(doc))
-        vector = {}
-        for term, count in counts.items():
-            # TF-IDF-inspired weighting keeps this dependency-free and deterministic.
-            idf = 1.0 + math.log((n + 1) / (document_frequency[term] + 1))
-            vector[term] = (count / total) * idf
-        vectors.append(vector)
-
+        vectors.append({
+            term: (count / total) * (1.0 + math.log((n + 1) / (document_frequency[term] + 1)))
+            for term, count in counts.items()
+        })
     return vectors, docs
 
 def cluster_articles(items):
     items = sorted(items, key=lambda x: x["published_at"])
     if not items:
         return []
-
     vectors, docs = build_vectors(items)
-    groups = []
-    assigned = set()
+    groups, assigned = [], set()
     threshold = 0.27
 
     for i in range(len(items)):
         if i in assigned:
             continue
-
         group = [i]
         assigned.add(i)
         changed = True
-
         while changed:
             changed = False
             group_terms = set().union(*(set(docs[k]) for k in group))
@@ -185,7 +176,6 @@ def cluster_articles(items):
                     assigned.add(j)
                     changed = True
                     group_terms.update(docs[j])
-
         groups.append(group)
 
     clusters = []
@@ -194,23 +184,17 @@ def cluster_articles(items):
         common = Counter()
         for idx in members:
             common.update(set(docs[idx]))
-
         label_words = [word for word, _ in common.most_common(3)]
         label = " · ".join(label_words[:3]).title() if label_words else "Untitled topic"
         signature = "|".join(sorted(item["dedupe_key"] for item in group_items))
-        cluster_id = "c_" + hashlib.sha1(signature.encode()).hexdigest()[:16]
-
-        clusters.append(
-            {
-                "id": cluster_id,
-                "label": label,
-                "article_count": len(group_items),
-                "start_time": min(x["published_at"] for x in group_items),
-                "end_time": max(x["published_at"] for x in group_items),
-                "members": group_items,
-            }
-        )
-
+        clusters.append({
+            "id": "c_" + hashlib.sha1(signature.encode()).hexdigest()[:16],
+            "label": label,
+            "article_count": len(group_items),
+            "start_time": min(x["published_at"] for x in group_items),
+            "end_time": max(x["published_at"] for x in group_items),
+            "members": group_items,
+        })
     return clusters
 
 def supabase_request(method, path, payload=None, params=None):
@@ -218,49 +202,35 @@ def supabase_request(method, path, payload=None, params=None):
     key = os.environ.get("SUPABASE_PUBLISHABLE_KEY") or os.environ.get("SUPABASE_ANON_KEY")
     if not key:
         raise RuntimeError("SUPABASE_PUBLISHABLE_KEY is required")
-
-    headers = {
-        "apikey": key,
-        "Authorization": f"Bearer {key}",
-        "Content-Type": "application/json",
-    }
+    headers = {"apikey": key, "Authorization": f"Bearer {key}", "Content-Type": "application/json"}
     if method in {"POST", "PATCH", "DELETE"}:
         headers["Prefer"] = "return=minimal"
+    return requests.request(method, url, headers=headers, json=payload, params=params, timeout=25)
 
-    return requests.request(
-        method,
-        url,
-        headers=headers,
-        json=payload,
-        params=params,
-        timeout=30,
-    )
+def extract_new_bodies(new_articles):
+    def work(article):
+        article["body_text"] = extract_body(article["url"])
+        return article
+    with ThreadPoolExecutor(max_workers=EXTRACTION_WORKERS) as pool:
+        futures = [pool.submit(work, article) for article in new_articles]
+        for future in as_completed(futures):
+            try:
+                future.result()
+            except Exception:
+                pass
 
 def run(job_id=None):
-    articles = list(fetch_articles())
+    metadata = fetch_metadata()
 
-    existing_response = supabase_request(
-        "GET", "articles", params={"select": "dedupe_key", "limit": 1000}
-    )
+    existing_response = supabase_request("GET", "articles", params={"select": "dedupe_key", "limit": 2000})
     existing_response.raise_for_status()
     existing = {row["dedupe_key"] for row in existing_response.json()}
-    new_articles = [article for article in articles if article["dedupe_key"] not in existing]
+
+    new_articles = [article for article in metadata if article["dedupe_key"] not in existing]
+    extract_new_bodies(new_articles)
 
     for article in new_articles:
-        payload = {
-            key: article[key]
-            for key in [
-                "id",
-                "dedupe_key",
-                "title",
-                "summary",
-                "body_text",
-                "source",
-                "url",
-                "published_at",
-            ]
-        }
-        response = supabase_request("POST", "articles", payload)
+        response = supabase_request("POST", "articles", payload=article)
         if response.status_code not in (201, 204):
             response.raise_for_status()
 
@@ -270,58 +240,36 @@ def run(job_id=None):
         params={
             "select": "id,dedupe_key,title,summary,body_text,source,url,published_at",
             "order": "published_at.asc",
-            "limit": 1000,
+            "limit": 2000,
         },
     )
     all_response.raise_for_status()
     all_items = all_response.json()
     clusters = cluster_articles(all_items)
 
-    clear_articles = supabase_request(
-        "PATCH",
-        "articles",
-        payload={"cluster_id": None},
-        params={"cluster_id": "not.is.null"},
-    )
+    clear_articles = supabase_request("PATCH", "articles", payload={"cluster_id": None}, params={"cluster_id": "not.is.null"})
     clear_articles.raise_for_status()
-
-    clear_clusters = supabase_request(
-        "DELETE", "clusters", params={"id": "not.is.null"}
-    )
+    clear_clusters = supabase_request("DELETE", "clusters", params={"id": "not.is.null"})
     clear_clusters.raise_for_status()
 
     for cluster in clusters:
-        cluster_payload = {
-            key: cluster[key]
-            for key in ["id", "label", "article_count", "start_time", "end_time"]
-        }
-        supabase_request("POST", "clusters", cluster_payload).raise_for_status()
-
+        payload = {key: cluster[key] for key in ["id", "label", "article_count", "start_time", "end_time"]}
+        supabase_request("POST", "clusters", payload).raise_for_status()
         for article in cluster["members"]:
             supabase_request(
-                "PATCH",
-                "articles",
+                "PATCH", "articles",
                 payload={"cluster_id": cluster["id"]},
-                params={"id": f"eq.{article['id']}"},
+                params={"id": f"eq.{article['id']}"}
             ).raise_for_status()
 
+    result = {"processed": len(new_articles), "clusters": len(clusters), "total_articles": len(all_items)}
     if job_id:
         supabase_request(
-            "PATCH",
-            "ingestion_jobs",
-            payload={
-                "status": "completed",
-                "finished_at": datetime.now(timezone.utc).isoformat(),
-                "processed_count": len(new_articles),
-            },
-            params={"id": f"eq.{job_id}"},
+            "PATCH", "ingestion_jobs",
+            payload={"status": "completed", "finished_at": datetime.now(timezone.utc).isoformat(), "processed_count": len(new_articles)},
+            params={"id": f"eq.{job_id}"}
         ).raise_for_status()
-
-    return {
-        "processed": len(new_articles),
-        "clusters": len(clusters),
-        "total_articles": len(all_items),
-    }
+    return result
 
 if __name__ == "__main__":
     print(run(os.environ.get("JOB_ID")))
