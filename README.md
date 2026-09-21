@@ -92,3 +92,9 @@ The required 2–3 minute walkthrough follows the assessment order:
 4. One improvement for additional time
 
 The final recording should be made against the deployed app so the demo is truthful.
+## Vercel import
+
+The repository is Vercel-ready. A one-click import URL is:
+https://vercel.com/new/import?s=https%3A%2F%2Fgithub.com%2Fdev2089%2Fnews-pulse
+
+After import, configure `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` for Production and Preview. No source files contain secret values.
