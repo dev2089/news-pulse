@@ -1,0 +1,49 @@
+name: Verify Vercel deployment metadata
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wait for Vercel deployment
+        id: deploy
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+        run: |
+          python3 - <<'PY'
+          import json, os, time, urllib.request
+          repo, sha = os.environ["REPO"], os.environ["SHA"]
+          headers = {"Accept": "application/vnd.github+json"}
+          for _ in range(30):
+              req=urllib.request.Request(f"https://api.github.com/repos/{repo}/deployments?sha={sha}&environment=Production&per_page=20",headers=headers)
+              with urllib.request.urlopen(req) as r: ds=json.load(r)
+              for d in ds:
+                with urllib.request.urlopen(urllib.request.Request(d["statuses_url"],headers=headers)) as r: ss=json.load(r)
+                for s in ss:
+                  if s.get("state")=="success" and s.get("target_url"):
+                    print("url="+s["target_url"])
+                    with open(os.environ["GITHUB_OUTPUT"],"a") as f:f.write("url="+s["target_url"]+"\n")
+                    raise SystemExit
+              time.sleep(10)
+          raise SystemExit("No successful Vercel deployment found")
+          PY
+      - name: Read deployment metadata
+        id: oidc
+        uses: actions/github-script@v7
+        with:
+          script: core.setOutput("token", await core.getIDToken())
+      - name: Fetch
+        env:
+          URL: ${{ steps.deploy.outputs.url }}
+          TOKEN: ${{ steps.oidc.outputs.token }}
+        run: |
+          curl -sS -f "$URL/api/meta" -H "x-vercel-trusted-oidc-idp-token: $TOKEN"
