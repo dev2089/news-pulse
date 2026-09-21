@@ -53,7 +53,7 @@ jobs:
           SHA: ${{ github.sha }}
         run: |
           curl -sS -f "$URL/api/meta" -H "x-vercel-trusted-oidc-idp-token: $TOKEN" -o /tmp/meta.json
-          PROD=$(python3 -c 'import json; print(json.load(open("/tmp/meta.json")).get("projectProductionUrl") or "")')
+          export PROD=$(python3 -c 'import json; print(json.load(open("/tmp/meta.json")).get("projectProductionUrl") or "")')
           python3 - <<'PY'
           import json, os, subprocess
           url=os.environ["URL"]
