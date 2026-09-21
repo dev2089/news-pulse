@@ -50,8 +50,8 @@ The publishable key is only used for this public assessment dataset. Production 
 
 ## Deployment
 
-Vercel hosts the Next.js experience, Node REST adapter and Python ingestion function. Supabase provides hosted Postgres persistence. Vercel Hobby Functions have a 300-second execution limit, so ingestion is bounded to recent feed entries and limited extraction work.
+Railway hosts one production Node service containing the Next.js frontend, required Node REST API, and Python ingestion worker. Supabase provides hosted Postgres persistence. Keeping Node and Python in the same runtime makes the required refresh-triggered subprocess flow explicit and testable.
 
 ## Video
 
-The required 2–3 minute walkthrough should show the live timeline, grouping logic, one engineering problem and its solution, and one improvement for more time.
+The required 2–3 minute walkthrough should show the live timeline with current news, grouping logic, one engineering problem and its solution, and one improvement for more time. Record the real deployed app after deployment so the demo is truthful and reproducible.
