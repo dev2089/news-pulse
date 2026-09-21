@@ -60,9 +60,9 @@ jobs:
           - Verified at: $(date -u +"%Y-%m-%dT%H:%M:%SZ")
           EOF
 
-          git config user.name "news-pulse-bot"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add DEPLOYMENT_INFO.md
-          git diff --cached --quiet && exit 0
-          git commit -m "Record verified live deployment"
-          git push
+          CONTENT=$(base64 -w0 DEPLOYMENT_INFO.md)
+          gh api "repos/${GITHUB_REPOSITORY}/contents/DEPLOYMENT_INFO.md" \
+            --method PUT \
+            --field message="Record verified live deployment" \
+            --field content="$CONTENT" \
+            --field branch="main"
