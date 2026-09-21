@@ -115,6 +115,6 @@ app.get("/ingest/status/:jobId",async(req,res)=>{
   }catch(error){console.error(error);return res.status(500).json({error:"internal server error"})}
 });
 
-app.all("*",(req,res)=>nextHandler(req,res));
+app.use((req,res)=>nextHandler(req,res));
 const port=Number(process.env.PORT||3000);
 app.listen(port,"0.0.0.0",()=>console.log(`News Pulse listening on ${port}`));
