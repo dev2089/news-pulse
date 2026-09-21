@@ -48,7 +48,7 @@ The pipeline accepts description/content variants, multiple date fields and miss
 
 ## Article extraction
 
-RSS entries normally contain summaries rather than complete articles. The pipeline first attempts extraction with Trafilatura and then falls back to BeautifulSoup. An extraction failure never aborts the whole ingestion run.
+RSS entries normally contain summaries rather than complete articles. The pipeline fetches the article page and uses BeautifulSoup with article-tag, paragraph, and whole-page fallbacks. An extraction failure never aborts the whole ingestion run.
 
 ## Duplicate + rerun behavior
 
