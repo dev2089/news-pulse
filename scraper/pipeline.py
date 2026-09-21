@@ -10,7 +10,6 @@ from urllib.parse import urlsplit, urlunsplit
 
 import feedparser
 import requests
-import trafilatura
 from bs4 import BeautifulSoup
 from dateutil import parser as date_parser
 
@@ -65,20 +64,6 @@ def extract_body(url: str) -> str:
     if not url:
         return ""
     try:
-        downloaded = trafilatura.fetch_url(url)
-        if downloaded:
-            extracted = trafilatura.extract(
-                downloaded,
-                include_links=False,
-                include_comments=False,
-                favor_precision=True,
-            )
-            if extracted and len(extracted.split()) > 40:
-                return clean_text(extracted)[:MAX_BODY_CHARS]
-    except Exception:
-        pass
-
-    try:
         response = requests.get(
             url,
             headers={"User-Agent": "NewsPulse/1.0 (+assessment demo)"},
@@ -86,8 +71,21 @@ def extract_body(url: str) -> str:
         )
         response.raise_for_status()
         soup = BeautifulSoup(response.text, "html.parser")
-        for tag in soup(["script", "style", "noscript", "nav", "footer", "header", "aside"]):
+        for tag in soup(["script", "style", "noscript", "nav", "footer", "header", "aside", "form"]):
             tag.decompose()
+
+        article = soup.find("article")
+        if article:
+            text = clean_text(article.get_text(" "))
+            if len(text.split()) > 40:
+                return text[:MAX_BODY_CHARS]
+
+        paragraphs = [clean_text(p.get_text(" ")) for p in soup.find_all("p")]
+        paragraphs = [p for p in paragraphs if len(p.split()) >= 8]
+        text = " ".join(paragraphs)
+        if len(text.split()) > 40:
+            return text[:MAX_BODY_CHARS]
+
         return clean_text(soup.get_text(" "))[:MAX_BODY_CHARS]
     except Exception:
         return ""
