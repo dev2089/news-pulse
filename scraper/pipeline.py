@@ -22,6 +22,8 @@ MAX_ENTRIES_PER_FEED = 12
 MAX_BODY_CHARS = 16000
 EXTRACTION_WORKERS = 6
 
+GENERIC_NEWS_TERMS = set("news latest says said report reports people world country countries new year years today yesterday monday tuesday wednesday thursday friday saturday sunday january february march april may june july august september october november december image video live read watch time day days week weeks month months one two first second".split())
+
 STOPWORDS = set(
     "a an and are as at be been but by can could for from had has have he her hers him his i if in into is it its just may might more most my of on or our out over said she should so some than that the their them then there these they this to too under up us was we were what when where which who will with would you your after before about against between during each few further how other same such through until while why into upon also because".split()
 )
@@ -57,7 +59,7 @@ def tokens(text: str):
     return [
         token.lower()
         for token in TOKEN_RE.findall(text.lower())
-        if token.lower() not in STOPWORDS and not token.isnumeric()
+        if token.lower() not in STOPWORDS and token.lower() not in GENERIC_NEWS_TERMS and not token.isnumeric()
     ]
 
 def extract_body(url: str) -> str:
@@ -152,8 +154,12 @@ def cluster_articles(items):
     if not items:
         return []
     vectors, docs = build_vectors(items)
+    document_frequency = Counter()
+    for doc in docs:
+        document_frequency.update(set(doc))
+    n = max(1, len(docs))
     groups, assigned = [], set()
-    threshold = 0.27
+    threshold = 0.34
 
     for i in range(len(items)):
         if i in assigned:
@@ -168,8 +174,9 @@ def cluster_articles(items):
                 if j in assigned:
                     continue
                 similarity = max((cosine(vectors[j], vectors[k]) for k in group), default=0.0)
-                shared = len(set(docs[j]) & group_terms)
-                if similarity >= threshold or shared >= 2:
+                shared_terms = set(docs[j]) & group_terms
+                meaningful_shared = len([term for term in shared_terms if document_frequency.get(term, 0) <= max(2, n * 0.45)])
+                if similarity >= threshold or meaningful_shared >= 2:
                     group.append(j)
                     assigned.add(j)
                     changed = True
