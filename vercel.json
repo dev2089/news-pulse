@@ -1,6 +1,6 @@
 {
   "$schema":"https://openapi.vercel.sh/vercel.json",
-  "functions":{"api/ingest.py":{"maxDuration":300}},
+  "functions":{"api/ingest.py":{"maxDuration":60}},
   "rewrites":[
     {"source":"/internal-python-ingest","destination":"/api/ingest"},
     {"source":"/clusters","destination":"/api/index.js?route=clusters"},
