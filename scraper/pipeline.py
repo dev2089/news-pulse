@@ -198,10 +198,8 @@ def cluster_articles(items):
     return clusters
 
 def supabase_request(method, path, payload=None, params=None):
-    url = os.environ["SUPABASE_URL"].rstrip("/") + "/rest/v1/" + path
-    key = os.environ.get("SUPABASE_PUBLISHABLE_KEY") or os.environ.get("SUPABASE_ANON_KEY")
-    if not key:
-        raise RuntimeError("SUPABASE_PUBLISHABLE_KEY is required")
+    url = (os.environ.get("SUPABASE_URL") or "https://smpmvabjafmrutdhbfbl.supabase.co").rstrip("/") + "/rest/v1/" + path
+    key = os.environ.get("SUPABASE_PUBLISHABLE_KEY") or os.environ.get("SUPABASE_ANON_KEY") or "sb_publishable_E7EU3ofBU4MThptewl5Sbw_e2GrOqjG"
     headers = {"apikey": key, "Authorization": f"Bearer {key}", "Content-Type": "application/json"}
     if method in {"POST", "PATCH", "DELETE"}:
         headers["Prefer"] = "return=minimal"
