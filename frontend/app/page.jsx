@@ -1,28 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowUpRight, Clock3, ExternalLink, Filter, Loader2, RefreshCw, Rss, Sparkles, X } from "lucide-react";
 import styles from "./page.module.css";
-
-const FALLBACK = {
-  clusters: [
-    {id:"demo-1",label:"Global economy & markets",article_count:4,start_time:"2026-09-21T05:40:00Z",end_time:"2026-09-21T10:30:00Z",sources:["BBC News","NPR","The Guardian"],articles:[
-      {title:"Markets digest fresh global economic signals",source:"BBC News",published_at:"2026-09-21T10:30:00Z",url:"https://www.bbc.com/news"},
-      {title:"Investors weigh central-bank outlook",source:"NPR",published_at:"2026-09-21T09:25:00Z",url:"https://www.npr.org/"},
-      {title:"What the latest data means for economies",source:"The Guardian",published_at:"2026-09-21T07:45:00Z",url:"https://www.theguardian.com/world"},
-      {title:"Global outlook shifts as new figures land",source:"BBC News",published_at:"2026-09-21T05:40:00Z",url:"https://www.bbc.com/news"}
-    ]},
-    {id:"demo-2",label:"Technology & AI",article_count:3,start_time:"2026-09-21T03:05:00Z",end_time:"2026-09-21T09:50:00Z",sources:["BBC News","The Guardian"],articles:[
-      {title:"AI tools move deeper into everyday products",source:"The Guardian",published_at:"2026-09-21T09:50:00Z",url:"https://www.theguardian.com/technology"},
-      {title:"New AI policy and product decisions emerge",source:"BBC News",published_at:"2026-09-21T08:10:00Z",url:"https://www.bbc.com/news/technology"},
-      {title:"Inside the fast-moving AI landscape",source:"BBC News",published_at:"2026-09-21T03:05:00Z",url:"https://www.bbc.com/news/technology"}
-    ]},
-    {id:"demo-3",label:"Climate & extreme weather",article_count:2,start_time:"2026-09-20T21:30:00Z",end_time:"2026-09-21T06:15:00Z",sources:["NPR","The Guardian"],articles:[
-      {title:"Extreme weather puts communities on alert",source:"NPR",published_at:"2026-09-21T06:15:00Z",url:"https://www.npr.org/"},
-      {title:"Climate impacts continue to shape the news cycle",source:"The Guardian",published_at:"2026-09-20T21:30:00Z",url:"https://www.theguardian.com/environment"}
-    ]}
-  ]
-};
 
 function fmtTime(value){if(!value)return"Unknown time";return new Intl.DateTimeFormat("en",{dateStyle:"medium",timeStyle:"short"}).format(new Date(value))}
 function timeAgo(value){const delta=Math.max(0,Date.now()-new Date(value).getTime())/60000;if(delta<60)return`${Math.round(delta)}m ago`;if(delta<1440)return`${Math.round(delta/60)}h ago`;return`${Math.round(delta/1440)}d ago`}
@@ -36,11 +16,13 @@ export default function Home(){
       const data=await res.json();const next=Array.isArray(data?.clusters)?data.clusters:[];
       if(next.length){setClusters(next);setSources(Array.from(new Set(next.flatMap(c=>c.sources||[]))).sort());setStatus(data.meta?.mode==="live"?"Live feed connected":"Database snapshot");setLastUpdated(new Date());return}
       throw new Error("empty dataset");
-    }catch{const next=FALLBACK.clusters;setClusters(next);setSources(Array.from(new Set(next.flatMap(c=>c.sources||[]))).sort());setStatus("Preview data · refresh to fetch current feeds");setLastUpdated(new Date())}
+    }catch{setClusters([]);setSources([]);setStatus("Live data unavailable · ingestion will retry");setLastUpdated(new Date())}
     finally{setLoading(false)}
   },[]);
   useEffect(()=>{loadTimeline()},[loadTimeline]);
+  const autoStarted=useRef(false);
   useEffect(()=>{if(!activeSources.size&&sources.length)setActiveSources(new Set(sources))},[sources,activeSources]);
+  useEffect(()=>{if(!loading&&clusters.length===0&&!refreshing&&!autoStarted.current){autoStarted.current=true;refreshData()}},[loading,clusters.length,refreshing]);
 
   const visibleClusters=useMemo(()=>clusters.filter(c=>{const clusterSources=new Set(c.sources||[]);if(!activeSources.size)return true;return[...clusterSources].some(s=>activeSources.has(s))}),[clusters,activeSources]);
   const range=useMemo(()=>{const values=visibleClusters.flatMap(c=>[new Date(c.start_time).getTime(),new Date(c.end_time).getTime()]);if(!values.length)return{min:Date.now()-86400000,max:Date.now()};return{min:Math.min(...values),max:Math.max(...values)}},[visibleClusters]);
@@ -83,7 +65,7 @@ export default function Home(){
 
     <section className={styles.timelineCard}>
       <div className={styles.timelineHeader}><div><span className={styles.sectionLabel}>LIVE TIMELINE</span><span className={styles.sectionHint}> · wider blocks mean longer story windows</span></div><div className={styles.axisLegend}><span/> newer →</div></div>
-      {loading?<div className={styles.empty}><Loader2 className={styles.spin}/> loading timeline…</div>:visibleClusters.length===0?<div className={styles.empty}>No stories match the selected sources.</div>:<div className={styles.timelineViewport}>
+      {loading?<div className={styles.empty}><Loader2 className={styles.spin}/> loading timeline…</div>:visibleClusters.length===0?<div className={styles.empty}><span>Waiting for live stories…</span><small>News Pulse automatically starts ingestion when the timeline is empty.</small></div>:<div className={styles.timelineViewport}>
         <div className={styles.axis}><span>{fmtTime(range.min)}</span><span>{fmtTime(range.max)}</span></div><div className={styles.gridLines}><i/><i/><i/><i/><i/></div>
         {visibleClusters.map((cluster,index)=>{const left=position(cluster.start_time),right=position(cluster.end_time),width=Math.max(8,parseFloat(right)-parseFloat(left)),active=selected?.id===cluster.id;return <button key={cluster.id} className={`${styles.cluster} ${active?styles.clusterActive:""}`} style={{left,width:`${width}%`,top:`${index*88+26}px`}} onClick={()=>setSelected(cluster)}><span className={styles.clusterDot}/><span className={styles.clusterLabel}>{cluster.label}</span><span className={styles.clusterCount}>{cluster.article_count} articles</span><span className={styles.clusterWindow}>{fmtTime(cluster.start_time)} → {fmtTime(cluster.end_time)}</span></button>})}
         <div className={styles.timeMarker} style={{left:"100%"}}/>
