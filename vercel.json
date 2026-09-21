@@ -1,10 +1,8 @@
 {
   "$schema":"https://openapi.vercel.sh/vercel.json",
-  "buildCommand":"next build frontend",
-  "installCommand":"npm install",
   "functions":{"api/ingest.py":{"maxDuration":300}},
   "rewrites":[
-    {"source":"/internal/python-ingest","destination":"/api/ingest"},
+    {"source":"/internal-python-ingest","destination":"/api/ingest"},
     {"source":"/clusters","destination":"/api/index.js?route=clusters"},
     {"source":"/clusters/:id","destination":"/api/index.js?route=cluster-detail&id=:id"},
     {"source":"/timeline","destination":"/api/index.js?route=timeline"},
