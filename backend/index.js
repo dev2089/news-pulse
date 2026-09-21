@@ -68,11 +68,13 @@ export async function handle(req,res){
     if(req.method==="GET"&&route==="timeline") return res.status(200).json(await timeline(supabase));
 
     if(req.method==="POST"&&route==="ingest-trigger"){
+      const running=await supabase.from("ingestion_jobs").select("id").eq("status","running").order("started_at",{ascending:false}).limit(1).maybeSingle();
+      if(running.error) throw running.error;
+      if(running.data) return res.status(409).json({error:"ingestion already running",job_id:running.data.id});
       const jobId=crypto.randomUUID();
       const {error}=await supabase.from("ingestion_jobs").insert({id:jobId,status:"running",started_at:new Date().toISOString()});
       if(error) throw error;
-      const baseUrl=url.origin;
-      waitUntil(runIngestion(baseUrl,jobId));
+      waitUntil(runIngestion(url.origin,jobId));
       return res.status(202).json({job_id:jobId,status:"running"});
     }
 
