@@ -55,3 +55,7 @@ Railway hosts one production Node service containing the Next.js frontend, requi
 ## Video
 
 The required 2–3 minute walkthrough should show the live timeline with current news, grouping logic, one engineering problem and its solution, and one improvement for more time. Record the real deployed app after deployment so the demo is truthful and reproducible.
+
+## Verification
+
+CI runs Python unit tests on pushes and pull requests. The deployment checklist is completed by testing the live endpoints, refresh flow, source filtering, cluster drawer, and cold-load behavior after deployment.
