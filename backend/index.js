@@ -2,9 +2,9 @@ import { createClient } from "@supabase/supabase-js";
 import { waitUntil } from "@vercel/functions";
 
 function getClient() {
-  const url = process.env.SUPABASE_URL;
-  const key = process.env.SUPABASE_PUBLISHABLE_KEY || process.env.SUPABASE_ANON_KEY;
-  if (!url || !key) throw new Error("SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY are required");
+  // Environment variables are preferred. The fallback is a Supabase publishable key, intended for public client use under RLS.
+  const url = process.env.SUPABASE_URL || "https://smpmvabjafmrutdhbfbl.supabase.co";
+  const key = process.env.SUPABASE_PUBLISHABLE_KEY || process.env.SUPABASE_ANON_KEY || "sb_publishable_E7EU3ofBU4MThptewl5Sbw_e2GrOqjG";
   return createClient(url, key, { auth: { persistSession: false } });
 }
 
