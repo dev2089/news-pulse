@@ -1,5 +1,6 @@
 {
   "$schema":"https://openapi.vercel.sh/vercel.json",
+  "framework":"nextjs",
   "functions":{"api/ingest.py":{"maxDuration":60}},
   "rewrites":[
     {"source":"/internal-python-ingest","destination":"/api/ingest"},
