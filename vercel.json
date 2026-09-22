@@ -2,6 +2,6 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "nextjs",
   "functions": {
-    "api/ingest.py": { "maxDuration": 60 }
+    "api/ingest.py": { "maxDuration": 180 }
   }
 }
