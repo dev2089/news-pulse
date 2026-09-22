@@ -49,6 +49,11 @@ jobs:
           URL: ${{ steps.deploy.outputs.url }}
         run: |
           set -e
+          echo "===== likely production alias ====="
+          curl -sS -D /tmp/prod-headers.txt -o /tmp/prod-body.txt -w "HTTP=%{http_code} BYTES=%{size_download}\n" "https://news-pulse.vercel.app/" || true
+          head -20 /tmp/prod-headers.txt || true
+          head -c 400 /tmp/prod-body.txt || true
+          echo
           curl -sS -f "$URL/" -o /tmp/home.html
           for path in /health /timeline /api/timeline; do
             echo "===== $path ====="
