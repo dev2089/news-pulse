@@ -50,7 +50,16 @@ jobs:
         run: |
           set -e
           curl -sS -f "$URL/" -o /tmp/home.html
-          curl -sS -f "$URL/timeline" -o /tmp/timeline-before.json
+          for path in /health /timeline /api/timeline; do
+            echo "===== $path ====="
+            curl -sS -D /tmp/headers.txt -o /tmp/body.txt -w "HTTP=%{http_code} BYTES=%{size_download}\n" "$URL$path"
+            head -20 /tmp/headers.txt || true
+            echo "--- body preview ---"
+            head -c 600 /tmp/body.txt || true
+            echo
+            echo
+          done
+          curl -sS -f "$URL/api/timeline" -o /tmp/timeline-before.json
           python3 - <<'PY'
           import json
           data=json.load(open("/tmp/timeline-before.json"))
