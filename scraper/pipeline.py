@@ -326,8 +326,10 @@ def cluster_articles(items):
 
 
 def supabase_request(method, path, payload=None, params=None):
-    base=(os.environ.get("SUPABASE_URL") or "https://smpmvabjafmrutdhbfbl.supabase.co").rstrip("/")
-    key=os.environ.get("SUPABASE_PUBLISHABLE_KEY") or os.environ.get("SUPABASE_ANON_KEY") or "sb_publishable_E7EU3ofBU4MThptewl5Sbw_e2GrOqjG"
+    base=(os.environ.get("SUPABASE_URL") or "").rstrip("/")
+    key=os.environ.get("SUPABASE_PUBLISHABLE_KEY") or os.environ.get("SUPABASE_ANON_KEY")
+    if not base or not key:
+        raise RuntimeError("Supabase environment variables are missing")
     headers={"apikey":key,"Authorization":f"Bearer {key}","Content-Type":"application/json"}
     if method in {"POST","PATCH","DELETE"}: headers["Prefer"]="return=minimal"
     if requests is None:
