@@ -117,7 +117,7 @@ SUPABASE_URL=https://<project-ref>.supabase.co
 SUPABASE_PUBLISHABLE_KEY=<publishable-key>
 ```
 
-No service-role key is required by the demo path. The Python function and Node API prefer environment variables. For the assessment demo, the source also contains a non-secret publishable-key fallback so a missing deployment variable does not prevent the public dashboard from booting. The database should still be configured with RLS policies appropriate for the deployment environment.
+No service-role key is required by the application path. The Node API and Python pipeline require `SUPABASE_URL` plus `SUPABASE_PUBLISHABLE_KEY` (or the legacy anon-key variable) from the deployment environment. No database URL or key is committed to the repository.
 
 ## Database shape
 
