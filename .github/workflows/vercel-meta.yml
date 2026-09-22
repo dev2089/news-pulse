@@ -1,13 +1,10 @@
-name: Verify Vercel deployment metadata
+name: Verify Vercel deployment
 
 on:
   push:
     branches: [main]
-    paths-ignore:
-      - "DEPLOYMENT_INFO.md"
 
 permissions:
-  id-token: write
   contents: read
   statuses: write
 
@@ -15,10 +12,9 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     steps:
-      - name: Wait for Vercel deployment
+      - name: Wait for Vercel production deployment
         id: deploy
         env:
-          GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           SHA: ${{ github.sha }}
         run: |
@@ -27,20 +23,28 @@ jobs:
           repo, sha = os.environ["REPO"], os.environ["SHA"]
           headers = {"Accept": "application/vnd.github+json"}
           for _ in range(30):
-              req=urllib.request.Request(f"https://api.github.com/repos/{repo}/deployments?sha={sha}&environment=Production&per_page=20",headers=headers)
-              with urllib.request.urlopen(req) as r: ds=json.load(r)
-              for d in ds:
-                with urllib.request.urlopen(urllib.request.Request(d["statuses_url"],headers=headers)) as r: ss=json.load(r)
-                for s in ss:
-                  if s.get("state")=="success" and s.get("target_url"):
-                    print("url="+s["target_url"])
-                    with open(os.environ["GITHUB_OUTPUT"],"a") as f:f.write("url="+s["target_url"]+"\n")
-                    raise SystemExit
+              req=urllib.request.Request(
+                  f"https://api.github.com/repos/{repo}/deployments?sha={sha}&environment=Production&per_page=20",
+                  headers=headers
+              )
+              with urllib.request.urlopen(req) as r:
+                  deployments=json.load(r)
+              for deployment in deployments:
+                  status_url=deployment["statuses_url"]
+                  with urllib.request.urlopen(urllib.request.Request(status_url, headers=headers)) as r:
+                      statuses=json.load(r)
+                  for status in statuses:
+                      if status.get("state")=="success" and status.get("target_url"):
+                          url=status["target_url"]
+                          print("url="+url)
+                          with open(os.environ["GITHUB_OUTPUT"],"a") as f:
+                              f.write("url="+url+"\n")
+                          raise SystemExit
               time.sleep(10)
           raise SystemExit("No successful Vercel deployment found")
           PY
 
-      - name: Smoke test deployed app
+      - name: Smoke test the live product
         env:
           URL: ${{ steps.deploy.outputs.url }}
         run: |
@@ -50,78 +54,53 @@ jobs:
           python3 - <<'PY'
           import json
           data=json.load(open("/tmp/timeline-before.json"))
-          print("initial clusters:", len(data.get("clusters", [])))
+          print("initial cluster count:", len(data.get("clusters", [])))
           PY
 
           TRIGGER=$(curl -sS -f -X POST "$URL/ingest/trigger" -H "content-type: application/json" -d '{}')
           echo "$TRIGGER"
           JOB_ID=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["job_id"])' <<< "$TRIGGER")
 
-          for i in $(seq 1 18); do
+          state="running"
+          for _ in $(seq 1 18); do
             STATUS=$(curl -sS -f "$URL/ingest/status/$JOB_ID")
             echo "$STATUS"
-            STATE=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["status"])' <<< "$STATUS")
-            if [ "$STATE" = "completed" ]; then break; fi
-            if [ "$STATE" = "failed" ]; then exit 1; fi
+            state=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["status"])' <<< "$STATUS")
+            if [ "$state" = "completed" ]; then break; fi
+            if [ "$state" = "failed" ]; then exit 1; fi
             sleep 10
           done
 
-          FINAL=$(curl -sS -f "$URL/timeline")
-          echo "$FINAL" > /tmp/timeline-after.json
+          if [ "$state" != "completed" ]; then
+            echo "Ingestion did not complete within smoke-test window"
+            exit 1
+          fi
+
+          curl -sS -f "$URL/timeline" -o /tmp/timeline-after.json
           python3 - <<'PY'
           import json
           data=json.load(open("/tmp/timeline-after.json"))
           clusters=data.get("clusters", [])
-          print("final clusters:", len(clusters))
+          print("final cluster count:", len(clusters))
           for cluster in clusters[:30]:
               print(f"- {cluster.get('label')} | {cluster.get('article_count')} articles | {', '.join(cluster.get('sources', []))}")
           if not clusters:
               raise SystemExit("Timeline returned no clusters after ingestion")
           if len(clusters) == 1:
-              raise SystemExit("Smoke test found a single cluster; topic grouping needs review")
+              raise SystemExit("Timeline still has one cluster after ingestion")
           PY
 
-      - name: Read deployment metadata
-        id: oidc
-        uses: actions/github-script@v7
-        with:
-          script: core.setOutput("token", await core.getIDToken())
-
-      - name: Fetch and publish deployment metadata
+      - name: Publish verified deployment URL
         env:
           URL: ${{ steps.deploy.outputs.url }}
-          TOKEN: ${{ steps.oidc.outputs.token }}
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           SHA: ${{ github.sha }}
         run: |
-          curl -sS -f "$URL/api/meta" -H "x-vercel-trusted-oidc-idp-token: $TOKEN" -o /tmp/meta.json || true
-          PROD=$(python3 - <<'PY'
-          import json
-          try:
-              print(json.load(open("/tmp/meta.json")).get("projectProductionUrl") or "")
-          except Exception:
-              print("")
-          PY
-          )
-          python3 - <<'PY'
-          import json, os, subprocess
-          url=os.environ["URL"]
-          prod=os.environ.get("PROD","")
-          target=prod or url
-          payload=json.dumps({
-            "state":"success",
-            "context":"Vercel production URL",
-            "description":("Verified project production domain: "+prod) if prod else "Verified Vercel deployment URL",
-            "target_url":target
-          })
-          subprocess.run([
-            "curl","-sS","-f","-X","POST",
-            f"https://api.github.com/repos/{os.environ['REPO']}/statuses/{os.environ['SHA']}",
-            "-H","Accept: application/vnd.github+json",
-            "-H",f"Authorization: Bearer {os.environ['GH_TOKEN']}",
-            "-H","Content-Type: application/json",
-            "-d",payload
-          ],check=True)
-          print("VERIFIED_URL="+target)
-          PY
+          curl -sS -f -X POST \
+            "https://api.github.com/repos/$REPO/statuses/$SHA" \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "{\"state\":\"success\",\"context\":\"Vercel production URL\",\"description\":\"Live News Pulse deployment verified\",\"target_url\":\"$URL\"}"
+          echo "VERIFIED_URL=$URL"
