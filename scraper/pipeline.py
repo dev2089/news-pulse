@@ -55,7 +55,8 @@ def clean_text(value: str) -> str:
         text = BeautifulSoup(value, "html.parser").get_text(" ")
     else:
         text = re.sub(r"<[^>]+>", " ", value)
-    return re.sub(r"s+", " ", text).strip()
+    text = text.replace("\xa0", " ")
+    return re.sub(r"\s+", " ", text).strip()
 
 
 def canonical_url(url: str) -> str:
@@ -105,14 +106,13 @@ def extract_body(url: str) -> str:
         for selector in ("article", "main", '[itemprop="articleBody"]'):
             node = soup.select_one(selector)
             if node:
-                text = clean_text(node.get_text(" "))
-                if len(text.split()) >= 45:
-                    return text[:MAX_BODY_CHARS]
+                body = clean_text(node.get_text(" "))
+                if len(body.split()) >= 45:
+                    return body[:MAX_BODY_CHARS]
 
         paragraphs = [clean_text(p.get_text(" ")) for p in soup.find_all("p")]
         paragraphs = [p for p in paragraphs if len(p.split()) >= 8]
-        combined = " ".join(paragraphs)
-        return combined[:MAX_BODY_CHARS]
+        return " ".join(paragraphs)[:MAX_BODY_CHARS]
     except Exception:
         return ""
 
@@ -153,8 +153,7 @@ def fetch_metadata():
                 articles.extend(future.result())
             except Exception:
                 continue
-    deduped = {article["dedupe_key"]: article for article in articles}
-    return list(deduped.values())
+    return list({article["dedupe_key"]: article for article in articles}.values())
 
 
 def build_vectors(items):
@@ -167,8 +166,7 @@ def build_vectors(items):
     for doc in docs:
         counts = Counter(doc)
         total = max(1, len(doc))
-        vector = {term:(count/total) * (1 + math.log((n + 1)/(df[term] + 1))) for term,count in counts.items()}
-        vectors.append(vector)
+        vectors.append({term:(count/total) * (1 + math.log((n + 1)/(df[term] + 1))) for term,count in counts.items()})
     return vectors, docs, df
 
 
@@ -196,30 +194,21 @@ def should_join(article_i, article_j, doc_i, doc_j, vec_i, vec_j, df, n):
     similarity = cosine(vec_i, vec_j)
     rare = rare_overlap(doc_i, doc_j, df, n)
     title_overlap = set(tokens(article_i["title"])) & set(tokens(article_j["title"]))
-    return (similarity >= SIMILARITY_THRESHOLD and len(rare) >= 1) or (similarity >= 0.24 and len(rare) >= 3) or (len(title_overlap) >= 2) or similarity >= STRONG_SIMILARITY
+    return (
+        (similarity >= SIMILARITY_THRESHOLD and len(rare) >= 1)
+        or (similarity >= 0.24 and len(rare) >= 3)
+        or (len(title_overlap) >= 2)
+        or similarity >= STRONG_SIMILARITY
+    )
 
 
 def label_for(members, docs, df):
     n = len(docs)
-    label_noise = GENERIC | STOPWORDS | set("sues sue sued challenges challenge hits hit says told warns warned urged urges accused accuses arrested arrest charged charge causes causing killed killing dies died being amid after over into against from says say report reports".split())
+    label_noise = GENERIC | STOPWORDS | set("sues sue sued challenges challenge hits hit says told warns warned urged urges accused accuses arrested arrest charged charge causes causing killed killing dies died being amid after over into against from say report reports".split())
     term_score = Counter()
     title_occurrence = Counter()
     named_score = Counter()
     named_occurrence = Counter()
-
-    def add_named_phrases(text, allow_sentence_start):
-        for sentence in re.split(r"(?<=[.!?])s+", text or ""):
-            raw_tokens = TOKEN_RE.findall(sentence)
-            run=[]
-            for idx, token in enumerate(raw_tokens):
-                low=token.lower().strip("'")
-                looks_named = (token.isupper() or (token[:1].isupper() and low not in label_noise and (allow_sentence_start or idx>0)))
-                if looks_named and low not in label_noise and not low.isnumeric():
-                    run.append(token)
-                else:
-                    flush(run)
-                    run=[] 
-            flush(run)
 
     def flush(run):
         if not run:
@@ -227,25 +216,39 @@ def label_for(members, docs, df):
         for size in (1,2,3):
             if len(run) < size:
                 continue
-            candidate=tuple(x.lower() for x in run[-size:])
+            candidate = tuple(x.lower() for x in run[-size:])
             if candidate[0] in {"the","a","an","this","that"}:
                 continue
-            named_occurrence[candidate]+=1
-            named_score[candidate]+=sum(1.0 + math.log((n+1)/(df.get(term,0)+1)) for term in candidate)
+            named_occurrence[candidate] += 1
+            named_score[candidate] += sum(1.0 + math.log((n+1)/(df.get(term,0)+1)) for term in candidate)
+
+    def add_named_phrases(text, allow_sentence_start):
+        for sentence in re.split(r"(?<=[.!?])\s+", text or ""):
+            raw_tokens = TOKEN_RE.findall(sentence)
+            run=[]
+            for idx, token in enumerate(raw_tokens):
+                low=token.lower().strip("'")
+                looks_named = token.isupper() or (token[:1].isupper() and low not in label_noise and (allow_sentence_start or idx>0))
+                if looks_named and low not in label_noise and not low.isnumeric():
+                    run.append(token)
+                else:
+                    flush(run)
+                    run=[]
+            flush(run)
 
     for article, _doc in members:
         title=article.get("title", "")
         summary=article.get("summary", "")
         for term in set(tokens(title)):
-            title_occurrence[term]+=1
+            title_occurrence[term] += 1
             if term not in label_noise:
-                term_score[term]+=1.4+math.log((n+1)/(df.get(term,0)+1))
+                term_score[term] += 1.4 + math.log((n+1)/(df.get(term,0)+1))
         add_named_phrases(title, True)
         add_named_phrases(summary, False)
 
     for term,count in title_occurrence.items():
         if count >= 2:
-            term_score[term]+=2.0
+            term_score[term] += 2.0
 
     named_candidates=[]
     for phrase,score in named_score.items():
@@ -275,10 +278,12 @@ def label_for(members, docs, df):
 
     if not selected:
         return "Emerging topic"
+
     def display_word(word):
-        if word.lower() in {"cnn", "npr", "un", "unga", "uk", "us", "usa", "eu", "ai", "bbc"}:
+        if word.lower() in {"cnn","npr","un","unga","uk","us","usa","eu","ai","bbc"}:
             return word.upper()
         return word.title()
+
     return " · ".join(" ".join(display_word(word) for word in part) for part in selected[:3])
 
 
@@ -287,21 +292,18 @@ def cluster_articles(items):
     if not items:
         return []
     vectors, docs, df = build_vectors(items)
-    n=len(items)
     clusters=[]
     for idx, article in enumerate(items):
         best=None
         for cluster in clusters:
-            similarities=[]
-            qualifies=[]
+            candidates=[]
             for member_idx in cluster["indices"]:
-                q=should_join(article,items[member_idx],docs[idx],docs[member_idx],vectors[idx],vectors[member_idx],df,n)
-                similarities.append(cosine(vectors[idx],vectors[member_idx]))
-                qualifies.append(q)
-            if any(qualifies):
-                candidate_score=max(sim for sim,q in zip(similarities,qualifies) if q)
-                if best is None or candidate_score > best[0]:
-                    best=(candidate_score,cluster)
+                if should_join(article,items[member_idx],docs[idx],docs[member_idx],vectors[idx],vectors[member_idx],df,len(items)):
+                    candidates.append(cosine(vectors[idx],vectors[member_idx]))
+            if candidates:
+                score=max(candidates)
+                if best is None or score > best[0]:
+                    best=(score,cluster)
         if best:
             best[1]["indices"].append(idx)
         else:
@@ -351,9 +353,11 @@ def run(job_id=None):
     existing={row["dedupe_key"] for row in existing_response.json()}
     new_articles=[article for article in metadata if article["dedupe_key"] not in existing]
     extract_new_bodies(new_articles)
+
     for article in new_articles:
         response=supabase_request("POST","articles",article)
-        if response.status_code not in (201,204): response.raise_for_status()
+        if response.status_code not in (201,204):
+            response.raise_for_status()
 
     all_response=supabase_request("GET","articles",params={"select":"id,dedupe_key,title,summary,body_text,source,url,published_at","order":"published_at.asc","limit":2000})
     all_response.raise_for_status()
@@ -374,6 +378,7 @@ def run(job_id=None):
     if job_id:
         supabase_request("PATCH","ingestion_jobs",{"status":"completed","finished_at":datetime.now(timezone.utc).isoformat(),"processed_count":len(new_articles)},{"id":f"eq.{job_id}"}).raise_for_status()
     return result
+
 
 if __name__ == "__main__":
     print(run(os.environ.get("JOB_ID")))
