@@ -1,4 +1,4 @@
-name: CI
+name: News Pulse CI
 
 on:
   push:
@@ -7,7 +7,7 @@ on:
     branches: [main]
 
 jobs:
-  python-tests:
+  python:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -18,15 +18,14 @@ jobs:
       - run: pip install -r scraper/requirements.txt pytest
       - run: pytest -q tests
 
-  node-tests:
+  node:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
+          cache: npm
       - run: npm install
-      - run: node --check server.mjs
-      - run: node --check backend/index.js
-      - run: node --check api/index.js
+      - run: npm run typecheck
       - run: npm run build
