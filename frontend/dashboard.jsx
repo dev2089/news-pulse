@@ -28,18 +28,25 @@ export default function Dashboard() {
 
   const loadTimeline = useCallback(async () => {
     try {
-      const res = await fetch("/timeline", { cache: "no-store" });
-      if (!res.ok) throw new Error("timeline request failed");
-      const payload = await res.json();
+      let payload;
+      try {
+        const res = await fetch("/timeline", { cache: "no-store" });
+        if (!res.ok) throw new Error("timeline request failed");
+        payload = await res.json();
+      } catch {
+        const demo = await fetch("/demo-timeline.json", { cache: "no-store" });
+        if (!demo.ok) throw new Error("timeline request failed");
+        payload = await demo.json();
+      }
       const next = Array.isArray(payload?.clusters) ? payload.clusters : [];
       setClusters(next);
       const nextSources = Array.from(new Set(next.flatMap((cluster) => cluster.sources || []))).sort();
       setSources(nextSources);
       setActiveSources((prev) => prev.size ? new Set([...prev].filter((source) => nextSources.includes(source))) : new Set(nextSources));
-      setStatus(payload?.meta?.mode === "live" ? "Live data connected" : "Database snapshot");
+      setStatus(payload?.meta?.mode === "live" ? "Live data connected" : payload?.meta?.mode === "demo" ? "Cached current snapshot" : "Database snapshot");
       setUpdatedAt(new Date());
     } catch {
-      setStatus("Live data unavailable · try refresh");
+      setStatus("No timeline snapshot available");
       setUpdatedAt(new Date());
     } finally {
       setLoading(false);
