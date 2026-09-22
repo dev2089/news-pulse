@@ -1,0 +1,268 @@
+{
+  "clusters": [
+    {
+      "id": "demo-un-nga",
+      "label": "UN General Assembly",
+      "article_count": 2,
+      "start_time": "2026-09-21T09:00:00+00:00",
+      "end_time": "2026-09-21T11:24:27+00:00",
+      "intensity": 1.585,
+      "sources": [
+        "NPR"
+      ],
+      "articles": [
+        {
+          "id": "50d01d43",
+          "title": "What to know as world leaders converge at the United Nations this week",
+          "source": "NPR",
+          "published_at": "2026-09-21T09:00:00+00:00",
+          "url": "https://www.npr.org/2026/09/21/nx-s1-5971262/united-nations-general-assembly",
+          "summary": "United Nations head António Guterres returns to New York for his final U.N. General Assembly as diplomacy falters over wars in Ukraine and the Middle East."
+        },
+        {
+          "id": "b02b0c19",
+          "title": "World leaders convene for UNGA. And, Trump says D.C. arch will be a 'military complex'",
+          "source": "NPR",
+          "published_at": "2026-09-21T11:24:27+00:00",
+          "url": "https://www.npr.org/2026/09/21/g-s1-144238/up-first-newsletter-united-nations-general-assembly-trump-arch-faa-ai-federal-agent-shooting",
+          "summary": "This week, world leaders convene for the U.N. General Assembly as war continues in Ukraine and the Gulf."
+        }
+      ]
+    },
+    {
+      "id": "demo-white-house",
+      "label": "White House · Media Lawsuit",
+      "article_count": 1,
+      "start_time": "2026-09-21T15:58:53+00:00",
+      "end_time": "2026-09-21T15:58:53+00:00",
+      "intensity": 1,
+      "sources": [
+        "BBC News"
+      ],
+      "articles": [
+        {
+          "id": "b0105f4b",
+          "title": "CNN, MS NOW and Politico file lawsuit against Trump's White House ban",
+          "source": "BBC News",
+          "published_at": "2026-09-21T15:58:53+00:00",
+          "url": "https://www.bbc.co.uk/news/articles/cm0e32rwvrryo",
+          "summary": "Major US networks later suspended White House TV coverage of Trump as he heads to New York for the UN summit."
+        }
+      ]
+    },
+    {
+      "id": "demo-air",
+      "label": "Air Traffic Control Glitch",
+      "article_count": 1,
+      "start_time": "2026-09-21T15:55:59+00:00",
+      "end_time": "2026-09-21T15:55:59+00:00",
+      "intensity": 1,
+      "sources": [
+        "BBC News"
+      ],
+      "articles": [
+        {
+          "id": "e5c95172",
+          "title": "Airlines criticise air traffic control as second glitch causes more disruption",
+          "source": "BBC News",
+          "published_at": "2026-09-21T15:55:59+00:00",
+          "url": "https://www.bbc.co.uk/news/articles/cqp80p78mxx5o",
+          "summary": "Airlines are angry about the delays, with EasyJet saying the latest incident once again calls into question the resilience of the system."
+        }
+      ]
+    },
+    {
+      "id": "demo-us-strikes",
+      "label": "US Boat Strikes · UN",
+      "article_count": 1,
+      "start_time": "2026-09-21T15:54:43+00:00",
+      "end_time": "2026-09-21T15:54:43+00:00",
+      "intensity": 1,
+      "sources": [
+        "The Guardian"
+      ],
+      "articles": [
+        {
+          "id": "6aaa4ae1",
+          "title": "US strikes on alleged drug boats may constitute ‘crimes against humanity’, UN finds",
+          "source": "The Guardian",
+          "published_at": "2026-09-21T15:54:43+00:00",
+          "url": "https://www.theguardian.com/world/2026/sep/21/us-boat-strikes-crime-against-humanity",
+          "summary": "A special rapporteur for the UN human rights council concluded there are reasonable grounds to believe US attacks on boats allegedly carrying drugs constituted crimes against humanity."
+        }
+      ]
+    },
+    {
+      "id": "demo-canada",
+      "label": "Ontario Synagogue Shooting",
+      "article_count": 1,
+      "start_time": "2026-09-21T14:56:58+00:00",
+      "end_time": "2026-09-21T14:56:58+00:00",
+      "intensity": 1,
+      "sources": [
+        "The Guardian"
+      ],
+      "articles": [
+        {
+          "id": "c4c56d20",
+          "title": "Man and police officer wounded in exchange of gunfire near Ontario synagogue",
+          "source": "The Guardian",
+          "published_at": "2026-09-21T14:56:58+00:00",
+          "url": "https://www.theguardian.com/world/2026/sep/21/gunfire-belleville-ontario-synagogue-yom-kippur",
+          "summary": "A police officer and a man were wounded in an exchange of gunfire on Sunday near a synagogue in Ontario as members of the Jewish community marked Yom Kippur."
+        }
+      ]
+    },
+    {
+      "id": "demo-yemen",
+      "label": "Yemen War · Refugees",
+      "article_count": 1,
+      "start_time": "2026-09-21T14:14:16+00:00",
+      "end_time": "2026-09-21T14:14:16+00:00",
+      "intensity": 1,
+      "sources": [
+        "BBC News"
+      ],
+      "articles": [
+        {
+          "id": "29b2a08e",
+          "title": "Watch: Inside a camp home to Yemeni refugees as Houthis and Saudi-backed forces escalate war",
+          "source": "BBC News",
+          "published_at": "2026-09-21T14:14:16+00:00",
+          "url": "https://www.bbc.co.uk/news/articles/cw4gm7l742dmo",
+          "summary": "The BBC's Frank Gardner speaks to some of those who have fled the war by crossing the Red Sea to Djibouti."
+        }
+      ]
+    },
+    {
+      "id": "demo-typhoon",
+      "label": "Typhoon Dujuan · Japan",
+      "article_count": 1,
+      "start_time": "2026-09-21T14:06:12+00:00",
+      "end_time": "2026-09-21T14:06:12+00:00",
+      "intensity": 1,
+      "sources": [
+        "BBC News"
+      ],
+      "articles": [
+        {
+          "id": "1a983d10",
+          "title": "Millions urged to evacuate as powerful Typhoon Dujuan hits Japan",
+          "source": "BBC News",
+          "published_at": "2026-09-21T14:06:12+00:00",
+          "url": "https://www.bbc.co.uk/news/articles/cm3wj2lexl97o",
+          "summary": "Japan's meteorological agency had warned of an imminent threat to life, but the warning was downgraded in most areas."
+        }
+      ]
+    },
+    {
+      "id": "demo-driving",
+      "label": "Dangerous Driving · Crash",
+      "article_count": 1,
+      "start_time": "2026-09-21T16:02:30+00:00",
+      "end_time": "2026-09-21T16:02:30+00:00",
+      "intensity": 1,
+      "sources": [
+        "BBC News"
+      ],
+      "articles": [
+        {
+          "id": "2e345d3b",
+          "title": "Man charged with causing death by dangerous driving over crash that killed 6",
+          "source": "BBC News",
+          "published_at": "2026-09-21T16:02:30+00:00",
+          "url": "https://www.bbc.co.uk/news/articles/cmqlwpkl72plo",
+          "summary": "Four members of the same family and a married couple on a motorbike died in the 2024 collision."
+        }
+      ]
+    },
+    {
+      "id": "demo-data-centres",
+      "label": "Data Centers · Communities",
+      "article_count": 1,
+      "start_time": "2026-09-21T09:00:00+00:00",
+      "end_time": "2026-09-21T09:00:00+00:00",
+      "intensity": 1,
+      "sources": [
+        "NPR"
+      ],
+      "articles": [
+        {
+          "id": "64a02725",
+          "title": "The data center backlash is reshaping American politics — one community at a time",
+          "source": "NPR",
+          "published_at": "2026-09-21T09:00:00+00:00",
+          "url": "https://www.npr.org/2026/09/21/nx-s1-5927288/data-center-election-voters-ai",
+          "summary": "The widespread debate around data centers has become a fault line in American communities, cutting across political parties and forging unexpected alliances."
+        }
+      ]
+    },
+    {
+      "id": "demo-germany",
+      "label": "Germany · State Elections",
+      "article_count": 1,
+      "start_time": "2026-09-21T09:00:00+00:00",
+      "end_time": "2026-09-21T09:00:00+00:00",
+      "intensity": 1,
+      "sources": [
+        "NPR"
+      ],
+      "articles": [
+        {
+          "id": "69d3ab38",
+          "title": "German chancellor stands his ground after his party loses in state elections",
+          "source": "NPR",
+          "published_at": "2026-09-21T09:00:00+00:00",
+          "url": "https://www.npr.org/2026/09/21/g-s1-144231/germany-state-elections-merz",
+          "summary": "German Chancellor Freidrich Merz conceded that the night spells disaster for the political center and said he would push ahead with his federal agenda."
+        }
+      ]
+    },
+    {
+      "id": "demo-culture",
+      "label": "British Museum · Bayeux Tapestry",
+      "article_count": 1,
+      "start_time": "2026-09-21T12:21:40+00:00",
+      "end_time": "2026-09-21T12:21:40+00:00",
+      "intensity": 1,
+      "sources": [
+        "BBC News"
+      ],
+      "articles": [
+        {
+          "id": "dd5bf56a",
+          "title": "British Museum bans visitors from photographing Bayeux Tapestry",
+          "source": "BBC News",
+          "published_at": "2026-09-21T12:21:40+00:00",
+          "url": "https://www.bbc.co.uk/news/articles/cmd79p4z98lzo",
+          "summary": "Visitors stopping to take pictures of the 68m medieval embroidery were holding up others, prompting the rule change."
+        }
+      ]
+    },
+    {
+      "id": "demo-mushrooms",
+      "label": "Iowa Farm · Mushrooms",
+      "article_count": 1,
+      "start_time": "2026-09-21T09:00:00+00:00",
+      "end_time": "2026-09-21T09:00:00+00:00",
+      "intensity": 1,
+      "sources": [
+        "NPR"
+      ],
+      "articles": [
+        {
+          "id": "a8fa2232",
+          "title": "This farm raised thousands of pigs for slaughter. Now it's growing mushrooms instead",
+          "source": "NPR",
+          "published_at": "2026-09-21T09:00:00+00:00",
+          "url": "https://www.npr.org/2026/09/21/nx-s1-5944503/iowa-hog-farm-growing-specialty-mushrooms",
+          "summary": "One Iowa family is switching from pigs to sustainable specialty mushrooms and trying to show other pig farmers how they did it."
+        }
+      ]
+    }
+  ],
+  "meta": {
+    "mode": "demo",
+    "note": "Fallback snapshot sourced from the current News Pulse database when the live API is unavailable."
+  }
+}
