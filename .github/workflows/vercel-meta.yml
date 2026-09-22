@@ -39,11 +39,54 @@ jobs:
               time.sleep(10)
           raise SystemExit("No successful Vercel deployment found")
           PY
+
+      - name: Smoke test deployed app
+        env:
+          URL: ${{ steps.deploy.outputs.url }}
+        run: |
+          set -e
+          curl -sS -f "$URL/" -o /tmp/home.html
+          curl -sS -f "$URL/timeline" -o /tmp/timeline-before.json
+          python3 - <<'PY'
+          import json
+          data=json.load(open("/tmp/timeline-before.json"))
+          print("initial clusters:", len(data.get("clusters", [])))
+          PY
+
+          TRIGGER=$(curl -sS -f -X POST "$URL/ingest/trigger" -H "content-type: application/json" -d '{}')
+          echo "$TRIGGER"
+          JOB_ID=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["job_id"])' <<< "$TRIGGER")
+
+          for i in $(seq 1 18); do
+            STATUS=$(curl -sS -f "$URL/ingest/status/$JOB_ID")
+            echo "$STATUS"
+            STATE=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["status"])' <<< "$STATUS")
+            if [ "$STATE" = "completed" ]; then break; fi
+            if [ "$STATE" = "failed" ]; then exit 1; fi
+            sleep 10
+          done
+
+          FINAL=$(curl -sS -f "$URL/timeline")
+          echo "$FINAL" > /tmp/timeline-after.json
+          python3 - <<'PY'
+          import json
+          data=json.load(open("/tmp/timeline-after.json"))
+          clusters=data.get("clusters", [])
+          print("final clusters:", len(clusters))
+          for cluster in clusters[:30]:
+              print(f"- {cluster.get('label')} | {cluster.get('article_count')} articles | {', '.join(cluster.get('sources', []))}")
+          if not clusters:
+              raise SystemExit("Timeline returned no clusters after ingestion")
+          if len(clusters) == 1:
+              raise SystemExit("Smoke test found a single cluster; topic grouping needs review")
+          PY
+
       - name: Read deployment metadata
         id: oidc
         uses: actions/github-script@v7
         with:
           script: core.setOutput("token", await core.getIDToken())
+
       - name: Fetch and publish deployment metadata
         env:
           URL: ${{ steps.deploy.outputs.url }}
@@ -52,8 +95,15 @@ jobs:
           REPO: ${{ github.repository }}
           SHA: ${{ github.sha }}
         run: |
-          curl -sS -f "$URL/api/meta" -H "x-vercel-trusted-oidc-idp-token: $TOKEN" -o /tmp/meta.json
-          export PROD=$(python3 -c 'import json; print(json.load(open("/tmp/meta.json")).get("projectProductionUrl") or "")')
+          curl -sS -f "$URL/api/meta" -H "x-vercel-trusted-oidc-idp-token: $TOKEN" -o /tmp/meta.json || true
+          PROD=$(python3 - <<'PY'
+          import json
+          try:
+              print(json.load(open("/tmp/meta.json")).get("projectProductionUrl") or "")
+          except Exception:
+              print("")
+          PY
+          )
           python3 - <<'PY'
           import json, os, subprocess
           url=os.environ["URL"]
