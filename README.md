@@ -1,100 +1,194 @@
 # News Pulse
 
-**Xponentium India Full-Stack Developer Internship Assessment**
+**Xponentium India · Full-Stack Developer Internship Assessment**  
+**Project:** Topic-Clustered News Timeline
 
-News Pulse pulls live articles from three public RSS feeds, normalizes feed inconsistencies, attempts full-page extraction with graceful fallback, prevents repeated URL duplicates, groups related stories into topic clusters, and presents those clusters as a visual timeline.
+News Pulse turns live RSS entries into a browsable story timeline. Three public news feeds are normalized into one article schema, article pages are fetched for fuller text when possible, URLs are canonicalized for rerun-safe deduplication, and articles are grouped with a deterministic TF–IDF-inspired similarity model. The React interface then renders each cluster as a time window and lets the reviewer inspect the underlying articles.
 
-## Assessment coverage
+## What is included
 
-The implementation directly covers the required Python ingestion/grouping, Node REST API, Next.js/React timeline, refresh + polling flow, hosted database, deployment configuration, README documentation, and video walkthrough plan.
-
-## Repository structure
-
-- `/scraper` Python ingestion, extraction, TF-IDF-inspired topic grouping
-- `/backend` Node.js REST API logic
-- `/frontend` Next.js / React dashboard
-- `/api` Vercel-compatible API adapters
-- `/tests` automated Python tests
+- `/scraper` Python RSS ingestion, article extraction, deduplication and clustering.
+- `/backend` Node.js REST API and ingestion job orchestration.
+- `/app` Next.js application shell.
+- `/frontend` React dashboard component with a neumorphic UI.
+- `/api` Vercel adapters, including a catch-all Node route and the Python ingestion function.
+- `/tests` focused regression tests for normalization and clustering.
+- `.github/workflows/ci.yml` automated Python tests plus production build checks.
 
 ## Architecture
 
-`RSS feeds → Python normalizer/extractor → Supabase Postgres → Node REST API → Next.js timeline`
+```text
+BBC RSS ─┐
+NPR RSS ─┼─> Python normalizer/extractor ─> TF–IDF-style grouping ─> Supabase Postgres
+Guardian ─┘                                                           │
+                                                                      ▼
+                                                           Node REST API
+                                                                      │
+                                                                      ▼
+                                                               Next.js / React
+                                                                      │
+                                                                      ▼
+                                                        Neumorphic story timeline
+```
 
-The refresh flow is:
+### Refresh lifecycle
 
-`POST /ingest/trigger → job created → background Python function → GET /ingest/status/:jobId polling → timeline reload`
+```text
+POST /ingest/trigger
+        │
+        ▼
+   job row = running
+        │
+        ▼
+ Python ingestion function
+        │
+        ├── fetch RSS metadata
+        ├── fetch article pages
+        ├── dedupe new URLs
+        ├── recompute topic clusters
+        └── update job = completed / failed
+        │
+        ▼
+GET /ingest/status/:jobId  ← frontend polls
+        │
+        ▼
+GET /timeline             ← redraw
+```
 
 ## Topic grouping
 
-A deterministic, lightweight TF-IDF-inspired approach is used. Headline + summary + a bounded slice of extracted body text are tokenized, stopwords are removed, terms are weighted with inverse document frequency, and cosine similarity is compared against a `0.27` threshold. A small shared-term guard helps short but clearly related articles connect. Each cluster receives a label from the most frequent meaningful terms.
+The implementation uses a lightweight, deterministic TF–IDF-style approach rather than a heavier embedding service.
 
-Why this approach: the assessment explicitly accepts both keyword overlap and TF-IDF-style approaches and emphasizes coherent output plus clear reasoning. Keeping the implementation dependency-light makes the behavior inspectable and easier to deploy.
+1. Headline, RSS summary and a bounded slice of extracted body text become the document.
+2. Stopwords and generic news vocabulary are removed.
+3. Terms receive TF–IDF-like weights.
+4. Cosine similarity is compared against `0.34` with a rare-term guard.
+5. A looser path allows strong lexical evidence (`>= 0.24` plus three rare shared terms), two meaningful title terms, or very strong similarity (`>= 0.52`).
+6. Articles are compared with every member of an existing cluster before joining, limiting accidental “topic drift” caused by one weak bridge article.
+7. A 21-day time window prevents unrelated stories separated by long periods from being connected only because of vocabulary.
 
-### Parameter choice
-
-The similarity threshold was set to `0.27` after considering that news headlines often use different wording while still sharing several topic-specific terms. The shared-term guard uses two meaningful terms to avoid requiring long identical phrases.
+The clustering logic is intentionally explainable. The assessment explicitly accepts either keyword-overlap or TF–IDF approaches, and asks for a clear explanation of parameters and at least one limitation.
 
 ### Limitation
 
-Lexical similarity can miss semantically equivalent stories that use different vocabulary and can occasionally connect unrelated stories that share generic terms. Cross-source event merging is intentionally left as a future improvement.
+This is still lexical clustering. Two articles describing the same real-world event with very different vocabulary can remain separate, while unrelated articles can occasionally share enough terms to appear related. Cross-source event merging is therefore treated as a future enhancement rather than pretending semantic understanding is perfect.
 
 ## News sources
 
-- BBC News RSS: `https://feeds.bbci.co.uk/news/rss.xml`
-- NPR RSS: `https://feeds.npr.org/1001/rss.xml`
-- The Guardian World RSS: `https://www.theguardian.com/world/rss`
+- **BBC News:** `https://feeds.bbci.co.uk/news/rss.xml`
+- **NPR:** `https://feeds.npr.org/1001/rss.xml`
+- **The Guardian World:** `https://www.theguardian.com/world/rss`
 
-The pipeline accepts description/content variants, multiple date fields and missing dates.
+The parser accepts multiple common RSS field shapes (`summary`, `description`, `content`) and multiple date fields (`published`, `updated`, `created`, `date`). Invalid or missing dates fall back to the current UTC time so one malformed entry cannot break the run.
 
 ## Article extraction
 
-RSS entries normally contain summaries rather than complete articles. The pipeline fetches the article page and uses BeautifulSoup with article-tag, paragraph, and whole-page fallbacks. An extraction failure never aborts the whole ingestion run.
+RSS normally exposes a short summary rather than the full article. For each new entry the scraper attempts to retrieve the original page and extract article text from:
 
-## Duplicate + rerun behavior
+- `<article>`
+- `<main>`
+- `[itemprop="articleBody"]`
+- paragraph aggregation
 
-URLs are canonicalized and hashed into a unique `dedupe_key`. Existing keys are read before insertion, so repeated runs only insert unseen articles. Clusters are then recomputed from the retained corpus so the timeline stays coherent after new items arrive.
+Extraction failures return an empty body instead of aborting the ingestion job.
+
+## Duplicate and rerun behavior
+
+The URL is canonicalized by removing query strings and fragments, normalizing scheme/host casing, and trimming trailing slashes. A SHA-256 digest becomes the `dedupe_key` and the article ID prefix. Existing keys are checked before inserts, so repeated runs do not duplicate an article.
+
+Clusters are recomputed from the retained article corpus after new items are added. This keeps the timeline coherent as new articles arrive.
 
 ## API
 
-- `GET /clusters`
-- `GET /clusters/:id`
-- `GET /timeline`
-- `POST /ingest/trigger`
-- `GET /ingest/status/:jobId`
+| Method | Endpoint | Purpose |
+| --- | --- | --- |
+| GET | `/clusters` | Cluster list with label, count and time range |
+| GET | `/clusters/:id` | Full cluster detail with chronological articles |
+| GET | `/timeline` | Timeline-ready cluster objects with time range, count, intensity and sources |
+| POST | `/ingest/trigger` | Starts a new ingestion job; returns a job ID |
+| GET | `/ingest/status/:jobId` | Returns job state and processed count |
 
-The API uses appropriate 400/404/409/500-level responses, validates required identifiers, and keeps secrets in environment variables.
+The API returns `400` for missing required IDs, `404` for unknown resources, `409` for a concurrent ingestion attempt, and `500` for unexpected server/database failures.
+
+## Environment variables
+
+```bash
+SUPABASE_URL=https://<project-ref>.supabase.co
+SUPABASE_PUBLISHABLE_KEY=<publishable-key>
+```
+
+No service-role key is required by the demo path. The Python function and Node API prefer environment variables. For the assessment demo, the source also contains a non-secret publishable-key fallback so a missing deployment variable does not prevent the public dashboard from booting. The database should still be configured with RLS policies appropriate for the deployment environment.
+
+## Database shape
+
+The Supabase database contains three News Pulse tables:
+
+- `articles`: normalized source article records and cluster assignment.
+- `clusters`: derived topic labels and earliest/latest timestamps.
+- `ingestion_jobs`: refresh job state and counts.
+
+The assessment allows Postgres, MongoDB or SQLite, so Supabase Postgres keeps the deployment path simple while remaining compatible with the requested stack.
+
+## Local run
+
+Install Node 22+ and Python 3.11+.
+
+```bash
+npm install
+python -m pip install -r scraper/requirements.txt
+npm run dev
+```
+
+Open `http://localhost:3000`.
+
+The custom local server exposes the same Node routes used by the frontend and can launch the Python pipeline through `/api/ingest`. Set the Supabase environment variables before running a live ingestion locally.
+
+Useful checks:
+
+```bash
+npm run test
+npm run typecheck
+npm run build
+```
 
 ## Deployment
 
-**Frontend + Node API + Python function: Vercel**
-**Database: Supabase Postgres**
+The repository is structured for a Vercel deployment:
 
-Vercel serves the Next.js dashboard and API routes. The Python ingestion function is invoked as a background task from the Node trigger route. Supabase stores articles, clusters, and ingestion jobs.
+- Next.js UI is detected from the root `app/` directory.
+- Node API routes are exposed through `/api/[...path].js`.
+- `api/ingest.py` is the Python serverless function.
+- `vercel.json` limits the ingestion function to a short assessment-friendly execution window.
+- Environment variables are configured on the hosting platform instead of committed as secrets.
 
-Environment variables are configured outside the repository:
+The assessment asks for a live frontend URL and a live backend URL. Those URLs should be copied into the final submission only after a successful deployment and a cold-load/API smoke test.
 
-- `SUPABASE_URL`
-- `SUPABASE_PUBLISHABLE_KEY`
+## Verification checklist
 
-No database credentials or secret values are committed to source control.
+Before submission:
 
-## Verification
+- [ ] Dashboard opens from a cold browser session.
+- [ ] `/clusters` returns JSON.
+- [ ] `/timeline` returns timeline-ready data.
+- [ ] Clicking a cluster opens its article detail view.
+- [ ] Source chips hide/show the appropriate clusters.
+- [ ] `Refresh data` starts a job, polls its status, and redraws after completion.
+- [ ] Repeated ingestion does not duplicate URLs.
+- [ ] One malformed RSS entry or failed article-page extraction does not crash the run.
+- [ ] Production build passes CI.
+- [ ] A 2–3 minute walkthrough is recorded from the deployed app.
 
-GitHub Actions currently validates the Python tests, Node syntax and production Next.js build. The final live verification checklist covers cold loading, all required API routes, source filtering, cluster detail interaction, refresh/polling behavior, and current feed ingestion.
+## Video walkthrough plan
 
-## Video walkthrough
+The required walkthrough is intentionally aligned with the assessment order:
 
-The required 2–3 minute walkthrough follows the assessment order:
+1. **0:00–0:40** Live demo: show current clusters, click one cluster, open an original article, toggle a source.
+2. **0:40–1:30** Grouping logic: explain normalization, TF–IDF-style weighting, similarity thresholds and the rare-term guard.
+3. **1:30–2:10** Hard problem: show how inconsistent RSS fields and article extraction failures are handled without stopping the whole run.
+4. **2:10–2:30** Next improvement: semantic cross-source event merging and richer extraction heuristics.
 
-1. Live timeline with current news
-2. Grouping logic and code explanation
-3. One hard ingestion/grouping problem and the solution
-4. One improvement for additional time
+A ready-to-read script is included in `docs/video-script.md`.
 
-The final recording should be made against the deployed app so the demo is truthful.
-## Vercel import
+## Assessment mapping
 
-The repository is Vercel-ready and uses Vercel’s native Next.js detection. A current import URL is:
-https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fdev2089%2Fnews-pulse&project-name=news-pulse
-
-Environment variables are supported as deployment overrides. The app also has a documented fallback to the Supabase publishable key so the assessment demo can boot without manual configuration; no secret/service-role key is used.
+The implementation is intentionally mapped one-to-one with the supplied brief: Python ingestion/grouping, Node API endpoints, timeline + cluster detail + source filter + refresh/polling, hosted deployment structure, README documentation, and the required video walkthrough are all represented in the repository. The final live URLs and recorded walkthrough must be added after successful deployment/recording.
