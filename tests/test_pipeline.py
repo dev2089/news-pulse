@@ -3,7 +3,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parents[1]))
 
-from scraper.pipeline import canonical_url, clean_text, cluster_articles, cosine, parse_date
+from scraper.pipeline import canonical_url, clean_text, cluster_articles, cosine
 
 
 def test_clean_text_strips_html():
